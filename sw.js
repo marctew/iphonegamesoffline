@@ -1,9 +1,18 @@
-/* Service worker: makes the app launch with no network at all.
-   Strategy is stale-while-revalidate — the cached copy is served
-   instantly (so offline always works), and a fresh copy is fetched
-   in the background when there is a connection, ready for next launch. */
+/* Offline support for the games.
+ *
+ * Pages use NETWORK-FIRST: when there is a connection you always get the
+ * current version, and the cache is only used if the network fails or is
+ * slow. That costs a short round-trip on launch, but it means an update
+ * you publish shows up immediately instead of one launch later.
+ *
+ * Static assets (icons, manifest) use cache-first, since they never change
+ * without a version bump.
+ */
 
-const CACHE = "sudoku-v2";
+const VERSION = "v3";
+const CACHE = "games-" + VERSION;
+const NET_TIMEOUT = 3000;
+
 const ASSETS = [
   "./",
   "./index.html",
@@ -30,22 +39,48 @@ self.addEventListener("activate", e => {
   );
 });
 
+function timeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("slow")), ms);
+    promise.then(
+      v => { clearTimeout(t); resolve(v); },
+      e => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await timeout(fetch(req, { cache: "no-store" }), NET_TIMEOUT);
+    if (res && res.ok) cache.put(req, res.clone());
+    return res;
+  } catch (e) {
+    const hit = await cache.match(req) || await cache.match("./index.html");
+    if (hit) return hit;
+    throw e;
+  }
+}
+
+async function cacheFirst(req) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res && res.ok && res.type === "basic") cache.put(req, res.clone());
+  return res;
+}
+
 self.addEventListener("fetch", e => {
   const req = e.request;
-  if (req.method !== "GET" || !req.url.startsWith(self.location.origin)) return;
+  if (req.method !== "GET") return;
 
-  e.respondWith(
-    caches.match(req).then(hit => {
-      const fresh = fetch(req).then(res => {
-        if (res && res.status === 200 && res.type === "basic") {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => hit);
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
 
-      // cached copy wins the race; the network copy just refreshes the cache
-      return hit || fresh;
-    })
-  );
+  const isPage = req.mode === "navigate" ||
+                 url.pathname.endsWith(".html") ||
+                 url.pathname.endsWith("/");
+
+  e.respondWith(isPage ? networkFirst(req) : cacheFirst(req));
 });
