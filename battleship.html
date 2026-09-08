@@ -21,7 +21,7 @@
   --sea:#dae6f4; --sea-line:#c2d3e8;
   --ship:#8d95a3; --ship-dark:#5d6673;
   --miss:#9aa6b6; --hit:#d0342c; --sunk:#8e1d17;
-  --heat:10,95,208;
+  --heat:10,95,208; --ring:#16181d;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -32,7 +32,7 @@
     --sea:#1b2531; --sea-line:#243040;
     --ship:#6b7482; --ship-dark:#98a2b1;
     --miss:#5d6673; --hit:#ff6b60; --sunk:#c2433a;
-    --heat:111,176,255;
+    --heat:111,176,255; --ring:#ffffff;
   }
 }
 :root[data-theme="dark"]{
@@ -43,7 +43,7 @@
   --sea:#1b2531; --sea-line:#243040;
   --ship:#6b7482; --ship-dark:#98a2b1;
   --miss:#5d6673; --hit:#ff6b60; --sunk:#c2433a;
-  --heat:111,176,255;
+  --heat:111,176,255; --ring:#ffffff;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -108,9 +108,13 @@ header{width:min(100%,var(--size,420px)); display:flex; align-items:center; gap:
 .gc.pop{animation:pop .28s ease-out}
 @keyframes pop{0%{transform:scale(.55)}60%{transform:scale(1.12)}100%{transform:scale(1)}}
 .heat{position:absolute; inset:0; border-radius:2px; pointer-events:none; z-index:1}
+.ring{position:absolute; inset:0; border-radius:3px; pointer-events:none; z-index:3;
+  border:0 solid var(--ring); opacity:.9}
+.gc.latest .ring{border-width:2px}
 
 /* fleet pips */
-.fleet{width:min(100%,var(--size,420px)); display:flex; flex-wrap:wrap; gap:9px; justify-content:center; padding:1px 0}
+.fleet{width:min(100%,var(--size,420px)); display:flex; flex-wrap:wrap; gap:9px 10px; justify-content:center;
+  align-items:center; align-content:center; min-height:44px; padding:1px 0}
 .fs{display:flex; align-items:center; gap:3px}
 .fs .pips{display:flex; gap:2px}
 .fs .pip{width:7px; height:12px; border-radius:2px; background:var(--ship)}
@@ -162,7 +166,8 @@ table.stats tr.grp td{background:none; font-size:11px; text-transform:uppercase;
 .warn{background:rgba(208,52,44,.14); color:var(--hit); border-radius:10px; padding:10px 12px; font-size:13px; font-weight:600; margin-bottom:14px}
 .bigres{font-size:34px; font-weight:800; text-align:center; margin:6px 0 2px}
 .subres{text-align:center; color:var(--muted); font-size:14px; margin-bottom:18px}
-.legend{display:flex; gap:12px; justify-content:center; font-size:11.5px; color:var(--muted); font-weight:600; margin-top:2px}
+.legend{display:flex; gap:12px; justify-content:center; align-items:center; min-height:17px;
+  font-size:11.5px; color:var(--muted); font-weight:600; margin-top:2px}
 .legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px}
 </style>
 </head>
@@ -472,6 +477,8 @@ function freshGame(mode, diff) {
     yourShots: new Uint8Array(NC),  // your shots on foe
     foeShots: new Uint8Array(NC),   // ai shots on you
     shotCount: 0,
+    step: "aim",        // aim | afterYou | foeFiring | afterFoe
+    latest: [],         // cells struck by the shots just fired
     aim: [],
     placeIdx: 0,
     horiz: true,
@@ -481,7 +488,6 @@ function freshGame(mode, diff) {
 }
 
 const showHeat = () => G && G.diff !== "hard";
-const salvoSize = () => G.mode === "classic" ? 1 : aliveCount(G.foe === null ? G.you : G.you);
 
 /* ============================================================
    DOM
@@ -493,7 +499,8 @@ for (let i = 0; i < NC; i++) {
   const d = document.createElement("div");
   d.className = "gc"; d.dataset.i = i;
   const h = document.createElement("div"); h.className = "heat";
-  d.appendChild(h);
+  const rg = document.createElement("div"); rg.className = "ring";
+  d.append(h, rg);
   gridEl.appendChild(d);
   gcs.push({ el: d, heat: h });
 }
@@ -545,6 +552,7 @@ function render() {
     if (!showYours && G.phase === "over" && si !== -1 && !sh) cls += " ship";
     if (G.aim.includes(i)) cls += " aim";
     if (popped.has(i)) cls += " pop";
+    if (G.latest.includes(i)) cls += " latest";
 
     if (g.el.className !== cls) g.el.className = cls;
     g.heat.style.background = (heat && heatMax > 0 && !sh)
@@ -561,13 +569,12 @@ function render() {
 function renderFleet(showYours) {
   const board = showYours ? G.you : G.foe;
   const label = showYours ? "Your fleet" : "Enemy fleet";
-  const parts = board.ships.map(s => {
-    if (showYours || s.sunk || G.phase === "over") {
-      return `<div class="fs${s.sunk ? " gone" : ""}"><span class="pips">${
-        Array(s.len).fill('<span class="pip"></span>').join("")}</span><span class="nm">${s.name}</span></div>`;
-    }
-    return `<div class="fs"><span class="pips">${Array(s.len).fill('<span class="pip"></span>').join("")}</span><span class="nm">?</span></div>`;
-  });
+  // Which ships exist is public knowledge in Battleship — only their
+  // positions are hidden — so both fleets render identically. That also
+  // keeps this block one fixed height, so the grid never shifts.
+  const parts = board.ships.map(s =>
+    `<div class="fs${s.sunk ? " gone" : ""}"><span class="pips">${
+      Array(s.len).fill('<span class="pip"></span>').join("")}</span><span class="nm">${s.name}</span></div>`);
   $("fleet").innerHTML = `<div class="fs"><span class="nm" style="opacity:.75">${label}</span></div>` + parts.join("");
 }
 
@@ -580,15 +587,32 @@ function renderActions() {
     return;
   }
   if (G.phase === "over") { b.textContent = "New game"; b.disabled = false; return; }
+  if (busy) { b.textContent = "…"; b.disabled = true; return; }
+  // the turn only advances on a tap, so there is always time to read the board
+  if (G.step === "afterYou") { b.textContent = "Enemy's turn \u203a"; b.disabled = false; return; }
+  if (G.step === "afterFoe") { b.textContent = "Your turn \u203a"; b.disabled = false; return; }
   const need = G.mode === "classic" ? 1 : aliveCount(G.you);
   if (view === "defend") { b.textContent = "Switch to Attack to fire"; b.disabled = true; return; }
-  b.disabled = busy || G.aim.length !== need;
-  b.textContent = busy ? "…" :
-    G.aim.length === need ? (need > 1 ? `Fire ${need} shots` : "Fire") :
+  b.disabled = G.aim.length !== need;
+  b.textContent = G.aim.length === need ? (need > 1 ? `Fire ${need} shots` : "Fire") :
     `Select ${need - G.aim.length} more`;
 }
 
 function say(html) { $("status").innerHTML = html; }
+
+// "Hit" for one shot; "2 hits · 3 misses" for a salvo. Sinkings always
+// get named, since that is the part worth reading.
+function summarise(hits, misses, sunk, mine) {
+  const parts = [];
+  const total = hits + misses;
+  if (total === 1) { if (!sunk.length) parts.push(hits ? (mine ? "You were hit" : "Hit") : "Miss"); }
+  else {
+    if (hits) parts.push(`${hits} hit${hits === 1 ? "" : "s"}`);
+    if (misses) parts.push(`${misses} miss${misses === 1 ? "" : "es"}`);
+  }
+  for (const nm of sunk) parts.push(mine ? `Your <b>${nm}</b> is sunk` : `Sank the <b>${nm}</b>`);
+  return parts.join(" · ");
+}
 
 /* ============================================================
    Interaction
@@ -599,7 +623,7 @@ gridEl.addEventListener("click", e => {
   const i = +t.dataset.i;
 
   if (G.phase === "place") return placeTap(i);
-  if (G.phase === "over" || view !== "attack") return;
+  if (G.phase === "over" || view !== "attack" || G.step !== "aim") return;
 
   if (G.yourShots[i]) return;
   const need = G.mode === "classic" ? 1 : aliveCount(G.you);
@@ -652,6 +676,8 @@ $("btnFire").addEventListener("click", () => {
   if (!G || busy) return;
   if (G.phase === "place") { startPlay(); return; }
   if (G.phase === "over") { openModal("pNew"); return; }
+  if (G.step === "afterYou") { foeTurn(); return; }
+  if (G.step === "afterFoe") { beginAim(); return; }
   playerFire();
 });
 
@@ -671,6 +697,7 @@ function setView(v) {
    ============================================================ */
 function startPlay() {
   G.phase = "play";
+  G.step = "aim";
   setView("attack");
   say(G.mode === "salvo"
     ? "<span class='dim'>Salvo: you fire one shot per surviving ship.</span>"
@@ -687,7 +714,9 @@ async function playerFire() {
 
   const targets = G.aim.slice();
   G.aim = [];
-  const msgs = [];
+  G.latest = targets.slice();
+  let hits = 0, misses = 0;
+  const sunk = [];
   popped = new Set();
 
   for (const t of targets) {
@@ -695,50 +724,63 @@ async function playerFire() {
     G.shotCount++;
     if (!res) continue;
     popped.add(t);
-    if (res.sunk) msgs.push(`Sank the <b>${res.sunk.name}</b>`);
-    else if (res.hit) msgs.push("Hit");
-    else msgs.push("Miss");
+    if (res.hit) hits++; else misses++;
+    if (res.sunk) sunk.push(res.sunk.name);
+    say(summarise(hits, misses, sunk, false));
     render();
     if (targets.length > 1) await sleep(220);
   }
-  say(msgs.join(" · "));
-  await sleep(360);
-
+  busy = false;
+  say(summarise(hits, misses, sunk, false));
   if (allSunk(G.foe)) return finish(true);
-  await aiTurn();
+  G.step = "afterYou";            // hold here until the player is ready
+  render(); save();
 }
 
-async function aiTurn() {
+async function foeTurn() {
+  busy = true;
+  G.step = "foeFiring";
+  G.latest = [];
+  popped = new Set();
   setView("defend");
+  say("<span class='dim'>Incoming…</span>");
   render();
-  await sleep(showHeat() ? 700 : 380);
+  await sleep(showHeat() ? 650 : 330);
 
   const n = G.mode === "classic" ? 1 : aliveCount(G.foe);
   const st = knowledge(G.you, G.foeShots);
   const lens = G.you.ships.filter(s => !s.sunk).map(s => s.len);
   const picks = chooseShots(st, lens, n, G.diff);
+  G.latest = picks.slice();
 
-  const msgs = [];
-  popped = new Set();
+  let hits = 0, misses = 0;
+  const sunk = [];
   for (const p of picks) {
     const res = fireAt(G.you, G.foeShots, p);
     if (!res) continue;
     popped.add(p);
-    if (res.sunk) msgs.push(`Your <b>${res.sunk.name}</b> is sunk`);
-    else if (res.hit) msgs.push("You were hit");
-    else msgs.push("Miss");
-    say(msgs.join(" · "));
+    if (res.hit) hits++; else misses++;
+    if (res.sunk) sunk.push(res.sunk.name);
+    say(summarise(hits, misses, sunk, true));
     render();
-    await sleep(n > 1 ? 300 : 0);
+    if (n > 1) await sleep(300);
   }
-  say(msgs.join(" · "));
-  await sleep(520);
-
-  if (allSunk(G.you)) return finish(false);
-
-  setView("attack");
   busy = false;
+  say(summarise(hits, misses, sunk, true));
+  if (allSunk(G.you)) return finish(false);
+  G.step = "afterFoe";            // and hold again before going back to attack
+  render(); save();
+}
+
+function beginAim() {
+  G.step = "aim";
+  G.latest = [];
   popped = new Set();
+  setView("attack");
+  const n = aliveCount(G.you);
+  say(G.mode === "salvo"
+    ? `<span class='dim'>${n} shot${n === 1 ? "" : "s"} this turn.</span>`
+    : "<span class='dim'>Pick a target and fire.</span>");
   render(); save();
 }
 
@@ -748,6 +790,7 @@ function finish(won) {
   busy = false;
   setView("attack");
   popped = new Set();
+  G.latest = [];
   recordResult(won);
   render(); save();
   showOver();
@@ -775,7 +818,7 @@ function save() {
     you: G.you.ships.map(s => ({ bow: s.bow, horiz: s.horiz })),
     foe: G.foe.ships.map(s => ({ bow: s.bow, horiz: s.horiz })),
     yourShots: Array.from(G.yourShots), foeShots: Array.from(G.foeShots),
-    shotCount: G.shotCount, horiz: G.horiz, won: G.won
+    shotCount: G.shotCount, horiz: G.horiz, won: G.won, step: G.step, latest: G.latest
   });
 }
 
@@ -804,6 +847,9 @@ function load() {
       for (const s of board.ships) s.sunk = s.cells.length > 0 && s.hits === s.len;
     }
     g.shotCount = d.shotCount || 0;
+    // a turn interrupted mid-salvo resumes at aim rather than half-fired
+    g.step = ["aim", "afterYou", "afterFoe"].includes(d.step) ? d.step : "aim";
+    g.latest = Array.isArray(d.latest) ? d.latest : [];
     g.horiz = d.horiz !== false;
     g.phase = d.phase === "over" ? "over" : (g.you.ships.every(s => s.cells.length) && d.phase === "play" ? "play" : "place");
     g.won = d.won;
