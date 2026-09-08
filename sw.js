@@ -3,10 +3,11 @@
    instantly (so offline always works), and a fresh copy is fetched
    in the background when there is a connection, ready for next launch. */
 
-const CACHE = "sudoku-v1";
+const CACHE = "sudoku-v2";
 const ASSETS = [
   "./",
   "./index.html",
+  "./battleship.html",
   "./manifest.webmanifest",
   "./icon-180.png",
   "./icon-192.png",

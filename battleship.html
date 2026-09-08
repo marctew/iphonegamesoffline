@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Battleship">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" id="themeColor" content="#eef0f4">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Battleship</title>
+<style>
+:root{
+  --bg:#eef0f4; --panel:#ffffff; --text:#16181d; --muted:#7c8290;
+  --line:#c9ccd4; --line-strong:#454b57;
+  --accent:#0a5fd0; --btn:#ffffff; --btnb:#d3d7e0; --btnact:#dce6f8;
+  --shadow:0 8px 30px rgba(20,25,40,.16);
+  --sea:#dae6f4; --sea-line:#c2d3e8;
+  --ship:#8d95a3; --ship-dark:#5d6673;
+  --miss:#9aa6b6; --hit:#d0342c; --sunk:#8e1d17;
+  --heat:10,95,208;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1115; --panel:#191c22; --text:#e9ecf2; --muted:#8b93a3;
+    --line:#333844; --line-strong:#6b7482;
+    --accent:#6fb0ff; --btn:#212630; --btnb:#333a46; --btnact:#2b3646;
+    --shadow:0 8px 30px rgba(0,0,0,.5);
+    --sea:#1b2531; --sea-line:#243040;
+    --ship:#6b7482; --ship-dark:#98a2b1;
+    --miss:#5d6673; --hit:#ff6b60; --sunk:#c2433a;
+    --heat:111,176,255;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1115; --panel:#191c22; --text:#e9ecf2; --muted:#8b93a3;
+  --line:#333844; --line-strong:#6b7482;
+  --accent:#6fb0ff; --btn:#212630; --btnb:#333a46; --btnact:#2b3646;
+  --shadow:0 8px 30px rgba(0,0,0,.5);
+  --sea:#1b2531; --sea-line:#243040;
+  --ship:#6b7482; --ship-dark:#98a2b1;
+  --miss:#5d6673; --hit:#ff6b60; --sunk:#c2433a;
+  --heat:111,176,255;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{
+  background:var(--bg); color:var(--text);
+  font:16px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+  -webkit-text-size-adjust:100%; -webkit-user-select:none; user-select:none;
+  overscroll-behavior:none; touch-action:manipulation;
+}
+button{font:inherit;color:inherit;touch-action:manipulation}
+[hidden]{display:none!important}
+
+#app{
+  min-height:100dvh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:calc(env(safe-area-inset-top) + 6px) calc(env(safe-area-inset-right) + 10px)
+          calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px);
+  gap:8px;
+}
+header{width:min(100%,var(--size,420px)); display:flex; align-items:center; gap:7px}
+.hbtn{
+  background:var(--btn); border:1px solid var(--btnb); border-radius:10px;
+  padding:7px 11px; font-size:14.5px; font-weight:600; cursor:pointer;
+  text-decoration:none; color:inherit; display:inline-block;
+}
+.hbtn:active{background:var(--btnact)}
+.hspacer{flex:1}
+#modeLabel{font-size:11.5px; font-weight:700; color:var(--muted); letter-spacing:.05em; text-transform:uppercase; text-align:right; line-height:1.25}
+
+/* segmented view switch */
+.seg{display:grid; gap:4px; background:var(--btnb); padding:3px; border-radius:11px; width:min(100%,var(--size,420px))}
+.seg.two{grid-template-columns:1fr 1fr}
+.seg.three{grid-template-columns:repeat(3,1fr)}
+.seg button{background:none; border:none; border-radius:8px; padding:8px 4px; font-size:14px; font-weight:600; cursor:pointer; color:var(--muted)}
+.seg button.on{background:var(--panel); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.16)}
+.seg button .tag{display:block; font-size:10.5px; font-weight:600; opacity:.7}
+
+/* grids */
+.gridwrap{position:relative; width:var(--size); }
+.grid{
+  display:grid; grid-template-columns:repeat(10,1fr); gap:2px;
+  background:var(--sea-line); padding:2px; border-radius:8px;
+}
+.gc{
+  aspect-ratio:1; background:var(--sea); border-radius:2px;
+  display:flex; align-items:center; justify-content:center; position:relative;
+  font-size:calc(var(--size)/10*.5); line-height:1; font-weight:700;
+}
+.gc.ship{background:var(--ship)}
+.gc.ship::before{
+  content:""; position:absolute; inset:1px; border-radius:2px;
+  border:2px solid var(--ship-dark); z-index:2;
+}
+.gc.aim{outline:2px solid var(--accent); outline-offset:-2px; background:var(--btnact)}
+.gc.miss::after{
+  content:""; width:26%; height:26%; border-radius:50%; background:var(--miss);
+}
+.gc.hit{background:var(--hit)}
+.gc.hit::after{content:"✕"; color:#fff; font-size:calc(var(--size)/10*.5); font-weight:800}
+.gc.sunk{background:var(--sunk)}
+.gc.sunk::after{content:"✕"; color:#fff; font-size:calc(var(--size)/10*.5); font-weight:800}
+.gc.pop{animation:pop .28s ease-out}
+@keyframes pop{0%{transform:scale(.55)}60%{transform:scale(1.12)}100%{transform:scale(1)}}
+.heat{position:absolute; inset:0; border-radius:2px; pointer-events:none; z-index:1}
+
+/* fleet pips */
+.fleet{width:min(100%,var(--size,420px)); display:flex; flex-wrap:wrap; gap:9px; justify-content:center; padding:1px 0}
+.fs{display:flex; align-items:center; gap:3px}
+.fs .pips{display:flex; gap:2px}
+.fs .pip{width:7px; height:12px; border-radius:2px; background:var(--ship)}
+.fs.gone .pip{background:var(--sunk)}
+.fs .nm{font-size:10.5px; font-weight:700; color:var(--muted); letter-spacing:.02em}
+.fs.gone .nm{text-decoration:line-through; opacity:.65}
+
+#status{
+  width:min(100%,var(--size,420px)); min-height:38px; display:flex; align-items:center; justify-content:center;
+  text-align:center; font-size:14.5px; font-weight:600; padding:0 4px;
+}
+#status .dim{color:var(--muted); font-weight:500}
+
+#actions{width:min(100%,var(--size,420px)); display:grid; gap:8px}
+.act{
+  background:var(--accent); border:1px solid var(--accent); color:#fff;
+  border-radius:12px; padding:14px; font-size:16px; font-weight:700; cursor:pointer;
+}
+.act:disabled{opacity:.4; cursor:default}
+.act.sec{background:var(--btn); border-color:var(--btnb); color:var(--text); font-weight:600; padding:11px}
+.act.sec:active{background:var(--btnact)}
+.two{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+
+/* modal */
+#modal{position:fixed; inset:0; background:rgba(10,12,18,.5); backdrop-filter:blur(3px);
+  display:none; align-items:center; justify-content:center; padding:20px; z-index:50}
+#modal.on{display:flex}
+.panel{display:none; background:var(--panel); border-radius:18px; box-shadow:var(--shadow);
+  width:min(100%,400px); max-height:86dvh; overflow:auto; padding:20px}
+.panel.on{display:block}
+.panel h2{margin:0 0 4px; font-size:21px}
+.panel .sub{color:var(--muted); font-size:14px; margin:0 0 16px}
+.row{display:grid; gap:8px}
+.big{display:flex; justify-content:space-between; align-items:center; gap:10px;
+  background:var(--btn); border:1px solid var(--btnb); border-radius:12px;
+  padding:13px 15px; font-size:16px; font-weight:600; cursor:pointer; text-align:left; width:100%}
+.big:active{background:var(--btnact)}
+.big small{font-weight:500; color:var(--muted); font-size:12.5px}
+.big.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.big.primary small{color:rgba(255,255,255,.82)}
+.ghost{background:none; border:none; color:var(--muted); font-size:14.5px; font-weight:600; padding:12px; width:100%; cursor:pointer}
+.hr{height:1px; background:var(--line); margin:16px 0}
+table.stats{width:100%; border-collapse:collapse; font-size:14px}
+table.stats th,table.stats td{padding:6px 4px; text-align:right; border-bottom:1px solid var(--line)}
+table.stats th:first-child,table.stats td:first-child{text-align:left; font-weight:600}
+table.stats th{color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.04em}
+table.stats td{font-variant-numeric:tabular-nums}
+table.stats tr.grp td{background:none; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700; padding-top:12px}
+.warn{background:rgba(208,52,44,.14); color:var(--hit); border-radius:10px; padding:10px 12px; font-size:13px; font-weight:600; margin-bottom:14px}
+.bigres{font-size:34px; font-weight:800; text-align:center; margin:6px 0 2px}
+.subres{text-align:center; color:var(--muted); font-size:14px; margin-bottom:18px}
+.legend{display:flex; gap:12px; justify-content:center; font-size:11.5px; color:var(--muted); font-weight:600; margin-top:2px}
+.legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <a class="hbtn" href="./index.html">Sudoku</a>
+    <button class="hbtn" id="btnNew">New</button>
+    <button class="hbtn" id="btnStats">Stats</button>
+    <div class="hspacer"></div>
+    <div id="modeLabel">—</div>
+  </header>
+
+  <div class="seg two" id="viewSeg">
+    <button data-view="attack" class="on">Attack</button>
+    <button data-view="defend">Defend</button>
+  </div>
+
+  <div class="gridwrap"><div class="grid" id="grid"></div></div>
+
+  <div class="fleet" id="fleet"></div>
+  <div class="legend" id="legend"></div>
+  <div id="status"></div>
+
+  <div id="actions">
+    <button class="act" id="btnFire">Fire</button>
+    <div class="two" id="placeTools" hidden>
+      <button class="act sec" id="btnRotate">Rotate</button>
+      <button class="act sec" id="btnShuffle">Shuffle</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal">
+  <div class="panel" id="pNew">
+    <h2>New game</h2>
+    <p class="sub">Pick a mode, then a difficulty.</p>
+    <div class="seg two" id="modeSeg" style="margin-bottom:14px">
+      <button data-mode="classic" class="on">Classic<span class="tag">one shot a turn</span></button>
+      <button data-mode="salvo">Salvo<span class="tag">one per ship</span></button>
+    </div>
+    <div class="row">
+      <button class="big" data-diff="easy">Easy <small>Scattered fire · threat map on</small></button>
+      <button class="big" data-diff="medium">Medium <small>Reads the odds · threat map on</small></button>
+      <button class="big" data-diff="hard">Hard <small>Optimal · threat map hidden</small></button>
+    </div>
+    <button class="ghost" id="newCancel">Cancel</button>
+  </div>
+
+  <div class="panel" id="pOver">
+    <div class="bigres" id="overTitle"></div>
+    <div class="subres" id="overSub"></div>
+    <div class="row">
+      <button class="big primary" id="overAgain">Play again <small id="overAgainSub"></small></button>
+      <button class="big" id="overOther">Change mode</button>
+    </div>
+    <button class="ghost" id="overClose">Review the board</button>
+  </div>
+
+  <div class="panel" id="pStats">
+    <h2>Stats</h2>
+    <p class="sub">Best and average are shots taken in games you won.</p>
+    <div id="storageWarn"></div>
+    <table class="stats">
+      <thead><tr><th>Level</th><th>Won</th><th>Best</th><th>Avg</th><th>Streak</th></tr></thead>
+      <tbody id="statsBody"></tbody>
+    </table>
+    <div class="hr"></div>
+    <h2 style="font-size:17px">Theme</h2>
+    <div class="seg three" id="themeSeg" style="margin-top:8px">
+      <button data-theme="auto">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button>
+    </div>
+    <div class="hr"></div>
+    <h2 style="font-size:17px">Backup</h2>
+    <p class="sub" style="margin-bottom:10px">Covers every game in this app. Copy it somewhere safe.</p>
+    <textarea id="backupBox" spellcheck="false" style="width:100%;height:84px;font:12px/1.35 ui-monospace,Menlo,monospace;border:1px solid var(--btnb);border-radius:10px;padding:9px;background:var(--bg);color:var(--text);-webkit-user-select:text;user-select:text;resize:none"></textarea>
+    <div class="two" style="margin-top:8px">
+      <button class="big" id="backupCopy" style="justify-content:center">Copy</button>
+      <button class="big" id="backupRestore" style="justify-content:center">Restore</button>
+    </div>
+    <button class="ghost" id="statsReset">Reset battleship stats</button>
+    <button class="ghost" id="statsClose" style="color:var(--accent)">Done</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Storage (same contract as the sudoku game)
+   ============================================================ */
+const Store = (() => {
+  const mem = Object.create(null);
+  let ok = false;
+  try { localStorage.setItem("__t", "1"); localStorage.removeItem("__t"); ok = true; } catch (e) { ok = false; }
+  return {
+    ok,
+    get(k) { try { return ok ? localStorage.getItem(k) : (k in mem ? mem[k] : null); } catch (e) { return k in mem ? mem[k] : null; } },
+    set(k, v) { try { if (ok) localStorage.setItem(k, v); else mem[k] = v; } catch (e) { mem[k] = v; } },
+    del(k) { try { if (ok) localStorage.removeItem(k); else delete mem[k]; } catch (e) { delete mem[k]; } }
+  };
+})();
+const J = {
+  get(k, d) { const s = Store.get(k); if (s == null) return d; try { return JSON.parse(s); } catch (e) { return d; } },
+  set(k, v) { Store.set(k, JSON.stringify(v)); }
+};
+const K_GAME = "bs.game", K_STATS = "bs.stats", K_SET = "sudoku.settings";
+
+/* ============================================================
+   Board model + AI.  Everything above END PURE is DOM-free so it
+   can be lifted out and simulated headlessly.
+   ============================================================ */
+const NC = 100;
+const FLEET = [
+  { id: "carrier",    name: "Carrier",    len: 5 },
+  { id: "battleship", name: "Battleship", len: 4 },
+  { id: "cruiser",    name: "Cruiser",    len: 3 },
+  { id: "sub",        name: "Submarine",  len: 3 },
+  { id: "destroyer",  name: "Destroyer",  len: 2 }
+];
+
+const NEIGH = [];
+for (let i = 0; i < NC; i++) {
+  const r = (i / 10) | 0, c = i % 10, a = [];
+  if (r > 0) a.push(i - 10);
+  if (r < 9) a.push(i + 10);
+  if (c > 0) a.push(i - 1);
+  if (c < 9) a.push(i + 1);
+  NEIGH.push(a);
+}
+
+function shipCells(bow, len, horiz) {
+  const r = (bow / 10) | 0, c = bow % 10, out = [];
+  for (let k = 0; k < len; k++) out.push(horiz ? r * 10 + c + k : (r + k) * 10 + c);
+  return out;
+}
+function fits(bow, len, horiz) {
+  const r = (bow / 10) | 0, c = bow % 10;
+  return horiz ? c + len <= 10 : r + len <= 10;
+}
+
+function newBoard() {
+  return { ships: FLEET.map(s => ({ ...s, cells: [], hits: 0, sunk: false })), occ: new Int8Array(NC).fill(-1) };
+}
+function placeShip(board, si, bow, horiz) {
+  const s = board.ships[si];
+  if (!fits(bow, s.len, horiz)) return false;
+  const cells = shipCells(bow, s.len, horiz);
+  for (const c of cells) if (board.occ[c] !== -1 && board.occ[c] !== si) return false;
+  unplaceShip(board, si);
+  s.cells = cells; s.horiz = horiz; s.bow = bow;
+  for (const c of cells) board.occ[c] = si;
+  return true;
+}
+function unplaceShip(board, si) {
+  const s = board.ships[si];
+  for (const c of s.cells) if (board.occ[c] === si) board.occ[c] = -1;
+  s.cells = [];
+}
+function randomBoard() {
+  const b = newBoard();
+  for (let si = 0; si < b.ships.length; si++) {
+    for (;;) {
+      const horiz = Math.random() < 0.5;
+      const bow = (Math.random() * NC) | 0;
+      if (fits(bow, b.ships[si].len, horiz) && placeShip(b, si, bow, horiz)) break;
+    }
+  }
+  return b;
+}
+
+/* Fire at a board. shots: 0 none, 1 miss, 2 hit.
+   Sinking reveals the ship's outline to the shooter — same for both
+   sides, so the information is symmetric. */
+function fireAt(board, shots, i) {
+  if (shots[i]) return null;
+  const si = board.occ[i];
+  if (si === -1) { shots[i] = 1; return { i, hit: false }; }
+  shots[i] = 2;
+  const s = board.ships[si];
+  s.hits++;
+  if (s.hits === s.len) { s.sunk = true; return { i, hit: true, sunk: s }; }
+  return { i, hit: true };
+}
+const allSunk = board => board.ships.every(s => s.sunk);
+const aliveCount = board => board.ships.filter(s => !s.sunk).length;
+
+/* Knowledge grid from the shooter's point of view:
+   0 unknown, 1 miss, 2 hit belonging to a ship still afloat, 3 sunk */
+function knowledge(board, shots) {
+  const st = new Int8Array(NC);
+  for (let i = 0; i < NC; i++) {
+    if (!shots[i]) continue;
+    if (shots[i] === 1) { st[i] = 1; continue; }
+    const s = board.ships[board.occ[i]];
+    st[i] = s.sunk ? 3 : 2;
+  }
+  return st;
+}
+
+/* Probability density: for every legal placement of every ship still
+   afloat, add weight to each cell it covers. Parity and hunt/target
+   behaviour both fall out of this for free. */
+function densityGrid(st, lens) {
+  const g = new Float64Array(NC);
+  let openHits = 0;
+  for (let i = 0; i < NC; i++) if (st[i] === 2) openHits++;
+  const targeting = openHits > 0;
+
+  for (const L of lens) {
+    for (let o = 0; o < 2; o++) {
+      const horiz = o === 0;
+      for (let bow = 0; bow < NC; bow++) {
+        if (!fits(bow, L, horiz)) continue;
+        let ok = true, hits = 0;
+        const cells = shipCells(bow, L, horiz);
+        for (const c of cells) {
+          if (st[c] === 1 || st[c] === 3) { ok = false; break; }
+          if (st[c] === 2) hits++;
+        }
+        if (!ok) continue;
+        if (targeting && hits === 0) continue;      // in target mode only lines through a live hit matter
+        const w = targeting ? (1 << hits) : 1;      // prefer placements explaining more hits
+        for (const c of cells) if (st[c] === 0) g[c] += w;
+      }
+    }
+  }
+  return g;
+}
+
+/* Difficulty is a selection policy over the same density grid.
+   easy   - mostly scattered, sometimes poking next to a live hit
+   medium - random weighted by probability squared
+   hard   - always the maximum */
+function chooseShots(st, lens, n, diff) {
+  const g = densityGrid(st, lens);
+  const avail = [];
+  for (let i = 0; i < NC; i++) if (st[i] === 0) avail.push(i);
+  const picks = [];
+
+  for (let k = 0; k < n && avail.length; k++) {
+    let pick;
+    if (diff === "hard") {
+      let bv = -1;
+      for (const i of avail) if (g[i] > bv) bv = g[i];
+      const ties = avail.filter(i => g[i] === bv);
+      pick = ties[(Math.random() * ties.length) | 0];
+    } else if (diff === "medium") {
+      let total = 0;
+      const w = avail.map(i => { const x = g[i] * g[i]; total += x; return x; });
+      if (total <= 0) pick = avail[(Math.random() * avail.length) | 0];
+      else {
+        let r = Math.random() * total;
+        pick = avail[avail.length - 1];
+        for (let j = 0; j < avail.length; j++) { r -= w[j]; if (r <= 0) { pick = avail[j]; break; } }
+      }
+    } else {
+      const probes = avail.filter(i => NEIGH[i].some(p => st[p] === 2));
+      pick = (probes.length && Math.random() < 0.65)
+        ? probes[(Math.random() * probes.length) | 0]
+        : avail[(Math.random() * avail.length) | 0];
+    }
+    picks.push(pick);
+    avail.splice(avail.indexOf(pick), 1);
+    g[pick] = 0;
+  }
+  return picks;
+}
+/* ---- END PURE ---- */
+
+/* ============================================================
+   Settings / stats
+   ============================================================ */
+const DIFFS = ["easy", "medium", "hard"];
+const MODES = ["classic", "salvo"];
+const DIFF_NAME = { easy: "Easy", medium: "Medium", hard: "Hard" };
+const MODE_NAME = { classic: "Classic", salvo: "Salvo" };
+
+let settings = Object.assign({ theme: "auto" }, J.get(K_SET, {}));
+
+function blankStats() {
+  const o = {};
+  for (const m of MODES) { o[m] = {}; for (const d of DIFFS) o[m][d] = { played: 0, won: 0, best: null, total: 0, streak: 0, bestStreak: 0 }; }
+  return o;
+}
+let stats = J.get(K_STATS, null) || blankStats();
+for (const m of MODES) {
+  stats[m] = stats[m] || {};
+  for (const d of DIFFS) stats[m][d] = Object.assign({ played: 0, won: 0, best: null, total: 0, streak: 0, bestStreak: 0 }, stats[m][d]);
+}
+
+/* ============================================================
+   Game state
+   ============================================================ */
+let G = null;
+let view = "attack";
+let busy = false;
+let newMode = "classic";
+
+function freshGame(mode, diff) {
+  return {
+    mode, diff,
+    phase: "place",                 // place | play | over
+    you: newBoard(),                // your fleet; ai shoots at it
+    foe: randomBoard(),             // enemy fleet; you shoot at it
+    yourShots: new Uint8Array(NC),  // your shots on foe
+    foeShots: new Uint8Array(NC),   // ai shots on you
+    shotCount: 0,
+    aim: [],
+    placeIdx: 0,
+    horiz: true,
+    won: null,
+    log: []
+  };
+}
+
+const showHeat = () => G && G.diff !== "hard";
+const salvoSize = () => G.mode === "classic" ? 1 : aliveCount(G.foe === null ? G.you : G.you);
+
+/* ============================================================
+   DOM
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const gridEl = $("grid"), modal = $("modal");
+const gcs = [];
+for (let i = 0; i < NC; i++) {
+  const d = document.createElement("div");
+  d.className = "gc"; d.dataset.i = i;
+  const h = document.createElement("div"); h.className = "heat";
+  d.appendChild(h);
+  gridEl.appendChild(d);
+  gcs.push({ el: d, heat: h });
+}
+
+function fitBoard() {
+  const chrome = 44 + 44 + 30 + 20 + 44 + 60 + 40;
+  const h = window.innerHeight - chrome;
+  const size = Math.max(230, Math.min(window.innerWidth - 24, h, 420));
+  document.documentElement.style.setProperty("--size", Math.floor(size) + "px");
+}
+window.addEventListener("resize", fitBoard);
+window.addEventListener("orientationchange", () => setTimeout(fitBoard, 200));
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+let popped = new Set();
+
+function render() {
+  if (!G) return;
+  const placing = G.phase === "place";
+  $("modeLabel").innerHTML = MODE_NAME[G.mode] + "<br>" + DIFF_NAME[G.diff];
+  $("viewSeg").style.display = placing ? "none" : "";
+  $("placeTools").hidden = !placing;
+
+  const showYours = placing || view === "defend";
+  const board = showYours ? G.you : G.foe;
+  const shots = showYours ? G.foeShots : G.yourShots;
+
+  // heat only on your own board, only when the difficulty allows it
+  let heat = null, heatMax = 0;
+  if (showYours && !placing && showHeat() && G.phase === "play") {
+    const st = knowledge(G.you, G.foeShots);
+    heat = densityGrid(st, G.you.ships.filter(s => !s.sunk).map(s => s.len));
+    for (let i = 0; i < NC; i++) if (st[i] === 0) heatMax = Math.max(heatMax, heat[i]);
+  }
+
+  for (let i = 0; i < NC; i++) {
+    const g = gcs[i];
+    let cls = "gc";
+    const sh = shots[i];
+    const si = board.occ[i];
+    const sunkHere = si !== -1 && board.ships[si].sunk;
+
+    if (showYours && si !== -1 && !sh) cls += " ship";
+    if (sh === 1) cls += " miss";
+    else if (sh === 2) cls += sunkHere ? " sunk" : " hit";
+    // reveal the enemy fleet once the game is over
+    if (!showYours && G.phase === "over" && si !== -1 && !sh) cls += " ship";
+    if (G.aim.includes(i)) cls += " aim";
+    if (popped.has(i)) cls += " pop";
+
+    if (g.el.className !== cls) g.el.className = cls;
+    g.heat.style.background = (heat && heatMax > 0 && !sh)
+      ? `rgba(var(--heat),${(heat[i] / heatMax * 0.55).toFixed(3)})`
+      : "";
+  }
+
+  renderFleet(showYours);
+  $("legend").innerHTML = (heat && heatMax > 0)
+    ? `<span><i style="background:rgba(var(--heat),.5)"></i>where it thinks your ships are</span>` : "";
+  renderActions();
+}
+
+function renderFleet(showYours) {
+  const board = showYours ? G.you : G.foe;
+  const label = showYours ? "Your fleet" : "Enemy fleet";
+  const parts = board.ships.map(s => {
+    if (showYours || s.sunk || G.phase === "over") {
+      return `<div class="fs${s.sunk ? " gone" : ""}"><span class="pips">${
+        Array(s.len).fill('<span class="pip"></span>').join("")}</span><span class="nm">${s.name}</span></div>`;
+    }
+    return `<div class="fs"><span class="pips">${Array(s.len).fill('<span class="pip"></span>').join("")}</span><span class="nm">?</span></div>`;
+  });
+  $("fleet").innerHTML = `<div class="fs"><span class="nm" style="opacity:.75">${label}</span></div>` + parts.join("");
+}
+
+function renderActions() {
+  const b = $("btnFire");
+  if (G.phase === "place") {
+    const s = G.you.ships[G.placeIdx];
+    b.textContent = G.placeIdx >= FLEET.length ? "Start game" : `Place ${s.name} (${s.len})`;
+    b.disabled = G.placeIdx < FLEET.length;
+    return;
+  }
+  if (G.phase === "over") { b.textContent = "New game"; b.disabled = false; return; }
+  const need = G.mode === "classic" ? 1 : aliveCount(G.you);
+  if (view === "defend") { b.textContent = "Switch to Attack to fire"; b.disabled = true; return; }
+  b.disabled = busy || G.aim.length !== need;
+  b.textContent = busy ? "…" :
+    G.aim.length === need ? (need > 1 ? `Fire ${need} shots` : "Fire") :
+    `Select ${need - G.aim.length} more`;
+}
+
+function say(html) { $("status").innerHTML = html; }
+
+/* ============================================================
+   Interaction
+   ============================================================ */
+gridEl.addEventListener("click", e => {
+  const t = e.target.closest(".gc");
+  if (!t || !G || busy) return;
+  const i = +t.dataset.i;
+
+  if (G.phase === "place") return placeTap(i);
+  if (G.phase === "over" || view !== "attack") return;
+
+  if (G.yourShots[i]) return;
+  const need = G.mode === "classic" ? 1 : aliveCount(G.you);
+  const at = G.aim.indexOf(i);
+  if (at >= 0) G.aim.splice(at, 1);
+  else {
+    if (G.mode === "classic") G.aim = [i];
+    else if (G.aim.length < need) G.aim.push(i);
+    else { G.aim.shift(); G.aim.push(i); }
+  }
+  render();
+});
+
+function placeTap(i) {
+  const occ = G.you.occ[i];
+  if (occ !== -1) {                       // tap a placed ship to pick it back up
+    unplaceShip(G.you, occ);
+    G.placeIdx = Math.min(G.placeIdx, occ);
+    for (let k = 0; k < FLEET.length; k++) if (!G.you.ships[k].cells.length) { G.placeIdx = k; break; }
+    render(); say("Tap a square to set the bow.");
+    return;
+  }
+  if (G.placeIdx >= FLEET.length) return;
+  const s = G.you.ships[G.placeIdx];
+  // clamp so a ship near the edge still lands instead of refusing
+  let r = (i / 10) | 0, c = i % 10;
+  if (G.horiz) c = Math.min(c, 10 - s.len); else r = Math.min(r, 10 - s.len);
+  if (!placeShip(G.you, G.placeIdx, r * 10 + c, G.horiz)) { say("<span class='dim'>That overlaps another ship.</span>"); return; }
+  advancePlacement();
+}
+
+function advancePlacement() {
+  let next = FLEET.length;
+  for (let k = 0; k < FLEET.length; k++) if (!G.you.ships[k].cells.length) { next = k; break; }
+  G.placeIdx = next;
+  if (next >= FLEET.length) say("Fleet ready. <span class='dim'>Tap a ship to move it.</span>");
+  else say(`Place your <b>${G.you.ships[next].name}</b> <span class='dim'>· ${G.you.ships[next].len} squares, ${G.horiz ? "horizontal" : "vertical"}</span>`);
+  render(); save();
+}
+
+$("btnRotate").addEventListener("click", () => { G.horiz = !G.horiz; advancePlacement(); });
+$("btnShuffle").addEventListener("click", () => {
+  const r = randomBoard();
+  G.you = r; G.placeIdx = FLEET.length;
+  say("Fleet ready. <span class='dim'>Shuffle again or start.</span>");
+  render(); save();
+});
+
+$("btnFire").addEventListener("click", () => {
+  if (!G || busy) return;
+  if (G.phase === "place") { startPlay(); return; }
+  if (G.phase === "over") { openModal("pNew"); return; }
+  playerFire();
+});
+
+document.querySelectorAll("#viewSeg button").forEach(b => b.addEventListener("click", () => {
+  view = b.dataset.view;
+  document.querySelectorAll("#viewSeg button").forEach(x => x.classList.toggle("on", x === b));
+  render();
+}));
+
+function setView(v) {
+  view = v;
+  document.querySelectorAll("#viewSeg button").forEach(x => x.classList.toggle("on", x.dataset.view === v));
+}
+
+/* ============================================================
+   Turns
+   ============================================================ */
+function startPlay() {
+  G.phase = "play";
+  setView("attack");
+  say(G.mode === "salvo"
+    ? "<span class='dim'>Salvo: you fire one shot per surviving ship.</span>"
+    : "<span class='dim'>Pick a target and fire.</span>");
+  render(); save();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function playerFire() {
+  const need = G.mode === "classic" ? 1 : aliveCount(G.you);
+  if (G.aim.length !== need) return;
+  busy = true; renderActions();
+
+  const targets = G.aim.slice();
+  G.aim = [];
+  const msgs = [];
+  popped = new Set();
+
+  for (const t of targets) {
+    const res = fireAt(G.foe, G.yourShots, t);
+    G.shotCount++;
+    if (!res) continue;
+    popped.add(t);
+    if (res.sunk) msgs.push(`Sank the <b>${res.sunk.name}</b>`);
+    else if (res.hit) msgs.push("Hit");
+    else msgs.push("Miss");
+    render();
+    if (targets.length > 1) await sleep(220);
+  }
+  say(msgs.join(" · "));
+  await sleep(360);
+
+  if (allSunk(G.foe)) return finish(true);
+  await aiTurn();
+}
+
+async function aiTurn() {
+  setView("defend");
+  render();
+  await sleep(showHeat() ? 700 : 380);
+
+  const n = G.mode === "classic" ? 1 : aliveCount(G.foe);
+  const st = knowledge(G.you, G.foeShots);
+  const lens = G.you.ships.filter(s => !s.sunk).map(s => s.len);
+  const picks = chooseShots(st, lens, n, G.diff);
+
+  const msgs = [];
+  popped = new Set();
+  for (const p of picks) {
+    const res = fireAt(G.you, G.foeShots, p);
+    if (!res) continue;
+    popped.add(p);
+    if (res.sunk) msgs.push(`Your <b>${res.sunk.name}</b> is sunk`);
+    else if (res.hit) msgs.push("You were hit");
+    else msgs.push("Miss");
+    say(msgs.join(" · "));
+    render();
+    await sleep(n > 1 ? 300 : 0);
+  }
+  say(msgs.join(" · "));
+  await sleep(520);
+
+  if (allSunk(G.you)) return finish(false);
+
+  setView("attack");
+  busy = false;
+  popped = new Set();
+  render(); save();
+}
+
+function finish(won) {
+  G.phase = "over";
+  G.won = won;
+  busy = false;
+  setView("attack");
+  popped = new Set();
+  recordResult(won);
+  render(); save();
+  showOver();
+}
+
+/* ============================================================
+   Stats / persistence
+   ============================================================ */
+function recordResult(won) {
+  const s = stats[G.mode][G.diff];
+  s.played++;
+  if (won) {
+    s.won++; s.total += G.shotCount;
+    if (s.best == null || G.shotCount < s.best) s.best = G.shotCount;
+    s.streak++;
+    if (s.streak > s.bestStreak) s.bestStreak = s.streak;
+  } else s.streak = 0;
+  J.set(K_STATS, stats);
+}
+
+function save() {
+  if (!G) return;
+  J.set(K_GAME, {
+    mode: G.mode, diff: G.diff, phase: G.phase,
+    you: G.you.ships.map(s => ({ bow: s.bow, horiz: s.horiz })),
+    foe: G.foe.ships.map(s => ({ bow: s.bow, horiz: s.horiz })),
+    yourShots: Array.from(G.yourShots), foeShots: Array.from(G.foeShots),
+    shotCount: G.shotCount, horiz: G.horiz, won: G.won
+  });
+}
+
+/* Rebuild from the saved fleets and shot lists. The AI keeps no
+   private state of its own, so nothing can desync. */
+function load() {
+  const d = J.get(K_GAME, null);
+  if (!d || !d.you || !d.foe) return false;
+  try {
+    const g = freshGame(MODES.includes(d.mode) ? d.mode : "classic", DIFFS.includes(d.diff) ? d.diff : "medium");
+    const build = defs => {
+      const b = newBoard();
+      defs.forEach((def, si) => { if (def && def.bow != null) placeShip(b, si, def.bow, !!def.horiz); });
+      return b;
+    };
+    g.you = build(d.you); g.foe = build(d.foe);
+    if (g.foe.ships.some(s => !s.cells.length)) return false;
+    g.yourShots = Uint8Array.from(d.yourShots || []);
+    g.foeShots = Uint8Array.from(d.foeShots || []);
+    if (g.yourShots.length !== NC || g.foeShots.length !== NC) return false;
+    // recompute hit counts and sunk flags from the shot lists
+    for (const [board, shots] of [[g.foe, g.yourShots], [g.you, g.foeShots]]) {
+      for (let i = 0; i < NC; i++) {
+        if (shots[i] === 2 && board.occ[i] !== -1) board.ships[board.occ[i]].hits++;
+      }
+      for (const s of board.ships) s.sunk = s.cells.length > 0 && s.hits === s.len;
+    }
+    g.shotCount = d.shotCount || 0;
+    g.horiz = d.horiz !== false;
+    g.phase = d.phase === "over" ? "over" : (g.you.ships.every(s => s.cells.length) && d.phase === "play" ? "play" : "place");
+    g.won = d.won;
+    g.placeIdx = FLEET.length;
+    for (let k = 0; k < FLEET.length; k++) if (!g.you.ships[k].cells.length) { g.placeIdx = k; break; }
+    G = g;
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ============================================================
+   Modals
+   ============================================================ */
+function openModal(id) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === id));
+  modal.classList.add("on");
+}
+function closeModal() { modal.classList.remove("on"); }
+modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+
+function showOver() {
+  const s = stats[G.mode][G.diff];
+  $("overTitle").textContent = G.won ? "Fleet destroyed 🎉" : "You were sunk";
+  const bits = [`${MODE_NAME[G.mode]} · ${DIFF_NAME[G.diff]}`];
+  if (G.won) {
+    bits.push(`${G.shotCount} shots`);
+    if (s.best === G.shotCount) bits.push("new best");
+    else if (s.best != null) bits.push(`best ${s.best}`);
+    if (s.streak > 1) bits.push(`${s.streak} in a row`);
+  } else {
+    const left = G.foe.ships.filter(x => !x.sunk).length;
+    bits.push(`${left} enemy ship${left === 1 ? "" : "s"} still afloat`);
+  }
+  $("overSub").textContent = bits.join(" · ");
+  $("overAgainSub").textContent = `${MODE_NAME[G.mode]} · ${DIFF_NAME[G.diff]}`;
+  openModal("pOver");
+}
+
+function showStats() {
+  const tb = $("statsBody");
+  tb.innerHTML = "";
+  for (const m of MODES) {
+    tb.insertAdjacentHTML("beforeend", `<tr class="grp"><td colspan="5">${MODE_NAME[m]}</td></tr>`);
+    for (const d of DIFFS) {
+      const s = stats[m][d];
+      const avg = s.won ? Math.round(s.total / s.won) : "—";
+      tb.insertAdjacentHTML("beforeend",
+        `<tr><td>${DIFF_NAME[d]}</td><td>${s.won}/${s.played}</td><td>${s.best ?? "—"}</td><td>${avg}</td><td>${s.streak}</td></tr>`);
+    }
+  }
+  $("storageWarn").innerHTML = Store.ok ? "" :
+    "<div class='warn'>This page can't use browser storage, so progress will be lost when you close it.</div>";
+  document.querySelectorAll("#themeSeg button").forEach(b => b.classList.toggle("on", settings.theme === b.dataset.theme));
+  $("backupBox").value = JSON.stringify({
+    stats: J.get("sudoku.stats", null), settings, game: J.get("sudoku.game", null),
+    bsStats: stats, bsGame: J.get(K_GAME, null)
+  });
+  openModal("pStats");
+}
+
+/* ============================================================
+   Theme
+   ============================================================ */
+function isDark() {
+  if (settings.theme === "dark") return true;
+  if (settings.theme === "light") return false;
+  try { return window.matchMedia("(prefers-color-scheme: dark)").matches; } catch (e) { return false; }
+}
+function applyTheme() {
+  if (settings.theme === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", settings.theme);
+  const tc = $("themeColor");
+  if (tc) tc.setAttribute("content", isDark() ? "#0f1115" : "#eef0f4");
+}
+try {
+  window.matchMedia("(prefers-color-scheme: dark)")
+    .addEventListener("change", () => { if (settings.theme === "auto") applyTheme(); });
+} catch (e) {}
+
+/* ============================================================
+   Wiring
+   ============================================================ */
+$("btnNew").addEventListener("click", () => openModal("pNew"));
+$("btnStats").addEventListener("click", showStats);
+$("newCancel").addEventListener("click", closeModal);
+$("statsClose").addEventListener("click", closeModal);
+$("overClose").addEventListener("click", closeModal);
+$("overOther").addEventListener("click", () => openModal("pNew"));
+$("overAgain").addEventListener("click", () => startGame(G.mode, G.diff));
+
+document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", () => {
+  newMode = b.dataset.mode;
+  document.querySelectorAll("#modeSeg button").forEach(x => x.classList.toggle("on", x === b));
+}));
+document.querySelectorAll("[data-diff]").forEach(b => b.addEventListener("click", () => startGame(newMode, b.dataset.diff)));
+
+document.querySelectorAll("#themeSeg button").forEach(b => b.addEventListener("click", () => {
+  settings.theme = b.dataset.theme;
+  document.querySelectorAll("#themeSeg button").forEach(x => x.classList.toggle("on", x === b));
+  J.set(K_SET, settings); applyTheme(); render();
+}));
+$("statsReset").addEventListener("click", () => {
+  if (!confirm("Reset battleship stats?")) return;
+  stats = blankStats(); J.set(K_STATS, stats); showStats();
+});
+$("backupCopy").addEventListener("click", async () => {
+  const box = $("backupBox");
+  try { await navigator.clipboard.writeText(box.value); $("backupCopy").textContent = "Copied"; }
+  catch (e) { box.focus(); box.select(); $("backupCopy").textContent = "Select + copy"; }
+  setTimeout(() => { $("backupCopy").textContent = "Copy"; }, 1800);
+});
+$("backupRestore").addEventListener("click", () => {
+  let d;
+  try { d = JSON.parse($("backupBox").value); } catch (e) { alert("That doesn't look like valid backup text."); return; }
+  if (!d || typeof d !== "object") { alert("That doesn't look like valid backup text."); return; }
+  if (d.settings) { settings = Object.assign({ theme: "auto" }, d.settings); J.set(K_SET, settings); applyTheme(); }
+  if (d.stats) J.set("sudoku.stats", d.stats);
+  if (d.game) J.set("sudoku.game", d.game);
+  if (d.bsStats) { stats = d.bsStats; J.set(K_STATS, stats); }
+  if (d.bsGame) { J.set(K_GAME, d.bsGame); load(); render(); }
+  showStats(); alert("Restored.");
+});
+
+function startGame(mode, diff) {
+  closeModal();
+  busy = false;
+  G = freshGame(mode, diff);
+  G.you = randomBoard();            // start from a random fleet; rearrange or shuffle
+  G.placeIdx = FLEET.length;
+  setView("attack");
+  say("Fleet ready. <span class='dim'>Tap a ship to move it, or shuffle.</span>");
+  render(); save();
+}
+
+/* ============================================================
+   Boot
+   ============================================================ */
+applyTheme();
+fitBoard();
+if (!load()) {
+  G = freshGame("classic", "medium");
+  render();
+  openModal("pNew");
+} else {
+  if (G.phase === "place") say("Fleet ready. <span class='dim'>Tap a ship to move it, or shuffle.</span>");
+  else if (G.phase === "over") say(G.won ? "You won that one." : "You lost that one.");
+  else say("<span class='dim'>Pick a target and fire.</span>");
+  render();
+}
+
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(() => {}); });
+}
+</script>
+</body>
+</html>
